@@ -14,6 +14,9 @@
 // หมายเหตุ: รหัสนี้จะมองเห็นได้ในซอร์สของหน้าเว็บ จึงเป็นแค่การกันขั้นพื้นฐาน
 const API_KEY = '';
 
+// เวอร์ชันของโค้ดนี้ หน้าเว็บจะแสดงและเตือนถ้ายังใช้เวอร์ชันเก่า
+const SCRIPT_VERSION = '1.3.0';
+
 const SHEET_ROSTER = 'รายชื่อ';
 const SHEET_LOG = 'เช็คชื่อ';
 const SHEET_SETTINGS = 'ตั้งค่า';
@@ -141,7 +144,7 @@ function load_() {
       (days[date] = days[date] || {})[id] = { s: code, t: asTime_(r[5], tz), n: String(r[2] || '') };
     });
   }
-  return { roster: roster, settings: settings, days: days };
+  return { version: SCRIPT_VERSION, roster: roster, settings: settings, days: days };
 }
 
 function readSettings_(ss) {
