@@ -456,9 +456,9 @@ const STATUS = {
 const AV_COLORS = ["#2c7a6b","#5566a8","#b7791f","#8a5a9e","#3d7fa6","#a65d3d","#4f8a3a","#a64f6e"];
 
 /* ---------- version ---------- */
-const APP_VERSION="1.3.2";          // เปลี่ยนเลขนี้ทุกครั้งที่ออกเวอร์ชันใหม่ และเพิ่มรายการใน CHANGELOG.md
+const APP_VERSION="1.4.0";          // เปลี่ยนเลขนี้ทุกครั้งที่ออกเวอร์ชันใหม่ และเพิ่มรายการใน CHANGELOG.md
 const APP_DATE="2026-11-14";
-const MIN_SCRIPT_VERSION="1.3.0";   // Code.gs ใน Google Sheet ต้องเป็นเวอร์ชันนี้ขึ้นไป
+const MIN_SCRIPT_VERSION="1.4.0";   // Code.gs ใน Google Sheet ต้องเป็นเวอร์ชันนี้ขึ้นไป
 const verCmp=(a,b)=>{ const x=String(a).split(".").map(Number), y=String(b).split(".").map(Number); for(let i=0;i<3;i++){ if((x[i]||0)!==(y[i]||0)) return (x[i]||0)-(y[i]||0); } return 0; };
 let scriptVersion=null;
 const LS_KEY="attendance-9am-v1";
@@ -524,7 +524,7 @@ function setMany(updates){
 function saveRoster(){
   if(!S.canWrite) return;
   render(); persist();
-  enqueue({action:"roster", members:S.roster.map(m=>({id:m.id,name:m.name,nick:m.nick||"",org:m.org||""})), settings:Object.assign({},S.settings)});
+  enqueue({action:"roster", members:S.roster.map(m=>({id:m.id,name:m.name,nick:m.nick||"",org:m.org||"",en:m.en||""})), settings:Object.assign({},S.settings)});
 }
 
 /* ---------- Google Sheet sync (Apps Script web app) ---------- */
