@@ -168,12 +168,13 @@
       <div class="card">
         <h3>เพิ่มสมาชิก</h3>
         <input id="m-name" placeholder="ชื่อ-นามสกุล">
+        <input id="m-company" placeholder="บริษัท/หน่วยงาน (ไม่บังคับ)" style="margin-top:8px">
         <div class="row" style="margin-top:8px">
           <input id="m-user" placeholder="username" autocapitalize="none" autocorrect="off">
           <input id="m-pass" placeholder="รหัสผ่าน (6+ ตัว)">
         </div>
         <button class="ghost" id="btn-add" style="width:100%;margin-top:8px">+ เพิ่มสมาชิก</button>
-        <label>นำเข้าจาก CSV: คอลัมน์ ชื่อ, username, รหัสผ่าน — จาก Excel ให้ Save As เป็น CSV UTF-8</label>
+        <label>นำเข้าจาก CSV: คอลัมน์ ชื่อ, username, รหัสผ่าน, บริษัท (ไม่บังคับ) — จาก Excel ให้ Save As เป็น CSV UTF-8</label>
         <input type="file" id="m-csv" accept=".csv,text/csv">
         <div id="m-msg"></div>
       </div>
@@ -202,6 +203,7 @@
         <button class="ghost" id="btn-here" style="margin-top:10px;width:100%">📍 ใช้ตำแหน่งที่ฉันยืนอยู่ตอนนี้</button>
         <div class="row"><div><label>รัศมี (เมตร)</label><input id="st-radius" type="number"></div>
                          <div><label>เวลาเข้าคลาส</label><input id="st-time" type="time"></div></div>
+        <label>ผ่อนผัน (นาที) — มาไม่เกินเวลานี้ยังนับว่าตรงเวลา</label><input id="st-grace" type="number" min="0">
         <button class="primary" id="btn-save" style="margin-top:14px">บันทึก</button>
         <div id="st-msg"></div>
       </div>
@@ -216,7 +218,7 @@
 const SUPABASE_URL = 'https://kgejyxllotpyecntbhrm.supabase.co';   // ← ใส่ Project URL
 const SUPABASE_KEY = 'sb_publishable_UpEZdl7R9rNd9vDEIOMMMw_qsrmx4Cl';         // ← ใส่ Publishable key (anon)
 const EMAIL_DOMAIN = '@teamlogin.app';   // username ถูกแปลงเป็นอีเมลภายในระบบ
-const APP_VERSION  = 'v2.1.1';
+const APP_VERSION  = 'v2.2.0';
 /* ================================================== */
 
 const $ = id => document.getElementById(id);
@@ -307,7 +309,7 @@ $('btn-checkin').onclick = () => {
       return note('ci-msg', 'err', m);
     }
     note('ci-msg', data.status === 'on_time' ? 'ok' : 'warn',
-      `เช็คชื่อสำเร็จ ${data.time} น. — ${data.status === 'on_time' ? 'ตรงเวลา 🎉' : 'สาย'} (ห่าง ${data.distance_m} ม.)`);
+      `เช็คชื่อสำเร็จ ${data.time} น. — ${data.status === 'on_time' ? 'ตรงเวลา 🎉' : 'สาย ' + data.late_min + ' นาที'} (ห่าง ${data.distance_m} ม.)`);
     loadMyHistory();
   }, err => {
     b.disabled = false; b.textContent = '📍 เช็คชื่อตอนนี้';
@@ -326,8 +328,8 @@ async function loadAdmin() { loadToday(); loadMembers(); loadSettings(); makeQR(
 async function loadToday() {
   const d = bkkDate();
   const [{ data: ms }, { data: at }] = await Promise.all([
-    sb.from('members').select('id,full_name').eq('active', true).eq('is_admin', false).order('full_name'),
-    sb.from('attendance').select('member_id,checkin_at,status').eq('checkin_date', d)
+    sb.from('members').select('id,full_name,company,username').eq('active', true).eq('is_admin', false).order('username'),
+    sb.from('attendance').select('member_id,checkin_at,status,late_min').eq('checkin_date', d)
   ]);
   const map = Object.fromEntries((at || []).map(a => [a.member_id, a]));
   const rows = (ms || []).map(m => ({ ...m, a: map[m.id] }))
@@ -335,14 +337,14 @@ async function loadToday() {
   $('s-ok').textContent = rows.filter(r => r.a?.status === 'on_time').length;
   $('s-late').textContent = rows.filter(r => r.a?.status === 'late').length;
   $('s-no').textContent = rows.filter(r => !r.a).length;
-  $('t-today').innerHTML = rows.map(r => `<tr><td>${esc(r.full_name)}</td><td>${r.a ? bkkTime(r.a.checkin_at) : '–'}</td><td>${pill(r.a?.status)}</td></tr>`).join('')
+  $('t-today').innerHTML = rows.map(r => `<tr><td>${esc(r.full_name)}${r.company ? `<div class="muted">${esc(r.company)}</div>` : ''}</td><td>${r.a ? bkkTime(r.a.checkin_at) : '–'}</td><td>${pill(r.a?.status)}${r.a?.late_min ? `<div class="muted">${r.a.late_min} นาที</div>` : ''}</td></tr>`).join('')
     || '<tr><td colspan="3" class="muted">ยังไม่มีรายชื่อ — เพิ่มที่แท็บ "รายชื่อ"</td></tr>';
 }
 $('btn-refresh').onclick = loadToday;
 sb.channel('att').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'attendance' }, () => { if (!$('v-admin').classList.contains('hidden')) loadToday(); }).subscribe();
 
 async function fetchHist() {
-  const { data, error } = await sb.from('attendance').select('checkin_date,checkin_at,status,distance_m,members(full_name,username)')
+  const { data, error } = await sb.from('attendance').select('checkin_date,checkin_at,status,late_min,distance_m,members(full_name,username,company)')
     .gte('checkin_date', $('h-from').value).lte('checkin_date', $('h-to').value).order('checkin_date').order('checkin_at');
   if (error) alert(error.message);
   return data || [];
@@ -354,8 +356,8 @@ $('btn-hist').onclick = async () => {
 };
 $('btn-export').onclick = async () => {
   const d = await fetchHist();
-  const csv = [['วันที่', 'ชื่อ', 'username', 'เวลา', 'สถานะ', 'ระยะ(ม.)'],
-    ...d.map(r => [r.checkin_date, r.members?.full_name, r.members?.username, bkkTime(r.checkin_at), r.status === 'on_time' ? 'ตรงเวลา' : 'สาย', r.distance_m])]
+  const csv = [['วันที่', 'ชื่อ', 'บริษัท', 'username', 'เวลา', 'สถานะ', 'สาย(นาที)', 'ระยะ(ม.)'],
+    ...d.map(r => [r.checkin_date, r.members?.full_name, r.members?.company, r.members?.username, bkkTime(r.checkin_at), r.status === 'on_time' ? 'ตรงเวลา' : 'สาย', r.late_min, r.distance_m])]
     .map(row => row.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
@@ -366,28 +368,28 @@ async function loadMembers() {
   const { data } = await sb.from('members').select('*').eq('active', true).order('is_admin', { ascending: false }).order('full_name');
   const list = (data || []).filter(m => !m.is_admin);
   $('m-count').textContent = list.length;
-  $('t-members').innerHTML = (data || []).map(m => `<tr><td>${esc(m.full_name)}${m.is_admin ? ' <span class="pill p-ok">แอดมิน</span>' : ''}</td><td class="muted">${esc(m.username)}</td>
+  $('t-members').innerHTML = (data || []).map(m => `<tr><td>${esc(m.full_name)}${m.is_admin ? ' <span class="pill p-ok">แอดมิน</span>' : ''}${m.company ? `<div class="muted">${esc(m.company)}</div>` : ''}</td><td class="muted">${esc(m.username)}</td>
     <td style="text-align:right;white-space:nowrap"><button class="del" style="color:var(--brand)" onclick="resetPw('${m.id}','${esc(m.full_name)}')">รหัส</button>${m.is_admin ? '' : `<button class="del" onclick="removeMember('${m.id}')">ลบ</button>`}</td></tr>`).join('');
 }
-async function addMember(name, user, pass) {
-  const { error } = await sb.rpc('admin_create_member', { p_full_name: name, p_username: clean(user), p_password: pass });
+async function addMember(name, user, pass, company) {
+  const { error } = await sb.rpc('admin_create_member', { p_full_name: name, p_username: clean(user), p_password: pass, p_company: company || null });
   return error ? errTH(error.message) : null;
 }
 $('btn-add').onclick = async () => {
   const n = $('m-name').value.trim(), u = $('m-user').value.trim(), p = $('m-pass').value;
   if (!n || !u || !p) return note('m-msg', 'warn', 'กรอกชื่อ, username และรหัสผ่านให้ครบ');
-  const err = await addMember(n, u, p);
+  const err = await addMember(n, u, p, $('m-company').value.trim());
   if (err) return note('m-msg', 'err', err);
   note('m-msg', 'ok', `เพิ่ม ${esc(n)} แล้ว — username: <b>${esc(clean(u))}</b>`);
-  $('m-name').value = $('m-user').value = $('m-pass').value = ''; loadMembers(); loadToday();
+  $('m-name').value = $('m-user').value = $('m-pass').value = $('m-company').value = ''; loadMembers(); loadToday();
 };
 $('m-csv').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   const lines = (await f.text()).replace(/^\ufeff/, '').split(/\r?\n/).map(l => l.split(',').map(c => c.replace(/^"|"$/g, '').trim())).filter(c => c[0]);
   if (/ชื่อ|name/i.test(lines[0]?.[0])) lines.shift();
   let ok = 0; const fails = [];
-  for (const [n, u, p] of lines) {
-    const err = (!u || !p) ? 'ไม่มี username/รหัสผ่าน' : await addMember(n, u, p);
+  for (const [n, u, p, c] of lines) {
+    const err = (!u || !p) ? 'ไม่มี username/รหัสผ่าน' : await addMember(n, u, p, c);
     err ? fails.push(`${esc(n)}: ${esc(err)}`) : ok++;
   }
   note('m-msg', fails.length ? 'warn' : 'ok', `นำเข้าสำเร็จ ${ok} คน` + (fails.length ? '<br>ไม่สำเร็จ:<br>' + fails.join('<br>') : ''));
@@ -404,7 +406,7 @@ async function loadSettings() {
   const { data: s } = await sb.from('settings').select('*').eq('id', 1).single();
   if (!s) return;
   $('st-name').value = s.company_name || ''; $('st-lat').value = s.company_lat ?? ''; $('st-lng').value = s.company_lng ?? '';
-  $('st-radius').value = s.radius_m; $('st-time').value = (s.class_time || '09:00').slice(0, 5);
+  $('st-radius').value = s.radius_m; $('st-time').value = (s.class_time || '09:00').slice(0, 5); $('st-grace').value = s.grace_min ?? 15;
 }
 $('btn-here').onclick = () => navigator.geolocation.getCurrentPosition(p => {
   $('st-lat').value = p.coords.latitude.toFixed(6); $('st-lng').value = p.coords.longitude.toFixed(6);
@@ -414,7 +416,7 @@ $('btn-save').onclick = async () => {
   const { error } = await sb.from('settings').update({
     company_name: $('st-name').value, company_lat: parseFloat($('st-lat').value) || null,
     company_lng: parseFloat($('st-lng').value) || null, radius_m: parseInt($('st-radius').value) || 300,
-    class_time: $('st-time').value || '09:00', updated_at: new Date().toISOString()
+    class_time: $('st-time').value || '09:00', grace_min: parseInt($('st-grace').value) || 0, updated_at: new Date().toISOString()
   }).eq('id', 1);
   note('st-msg', error ? 'err' : 'ok', error ? error.message : 'บันทึกแล้ว');
 };
